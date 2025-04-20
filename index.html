@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Echo Chamber</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        max-width: 500px;
+        margin: 2em auto;
+      }
+      label {
+        display: block;
+        margin: 1em 0;
+      }
+      input[type="range"] {
+        width: 100%;
+      }
+      #controls {
+        margin-top: 2em;
+      }
+      button {
+        margin-right: 1em;
+        padding: 0.5em 1em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Echo Chamber</h1>
+    <p>
+      Allow mic access, then use the sliders to shape your echo in real time.
+    </p>
+
+    <div id="controls">
+      <label>
+        Delay Time: <span id="delayVal">0.3</span>s
+        <input
+          id="delaySlider"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0.3"
+        />
+      </label>
+      <label>
+        Feedback: <span id="feedbackVal">0.5</span>
+        <input
+          id="feedbackSlider"
+          type="range"
+          min="0"
+          max="0.95"
+          step="0.01"
+          value="0.5"
+        />
+      </label>
+      <label>
+        Mix (Dry/Wet): <span id="mixVal">0.5</span>
+        <input
+          id="mixSlider"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0.5"
+        />
+      </label>
+
+      <button id="startBtn">Start</button>
+      <button id="stopBtn" disabled>Stop</button>
+    </div>
+
+    <script>
+      let audioCtx, micStream, sourceNode;
+      let delayNode, feedbackGain, dryGain, wetGain;
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const delaySlider = document.getElementById("delaySlider");
+      const feedbackSlider = document.getElementById("feedbackSlider");
+      const mixSlider = document.getElementById("mixSlider");
+      const delayVal = document.getElementById("delayVal");
+      const feedbackVal = document.getElementById("feedbackVal");
+      const mixVal = document.getElementById("mixVal");
+
+      function updateParams() {
+        const d = parseFloat(delaySlider.value);
+        const f = parseFloat(feedbackSlider.value);
+        const m = parseFloat(mixSlider.value);
+        delayNode.delayTime.value = d;
+        feedbackGain.gain.value = f;
+        dryGain.gain.value = 1 - m;
+        wetGain.gain.value = m;
+        delayVal.textContent = d.toFixed(2);
+        feedbackVal.textContent = f.toFixed(2);
+        mixVal.textContent = m.toFixed(2);
+      }
+
+      async function startEcho() {
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+
+        // 1. set up AudioContext + mic input
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        sourceNode = audioCtx.createMediaStreamSource(micStream);
+
+        // 2. create nodes
+        delayNode = audioCtx.createDelay(5.0); // max delay 5s
+        feedbackGain = audioCtx.createGain();
+        dryGain = audioCtx.createGain();
+        wetGain = audioCtx.createGain();
+
+        // 3. connect for echo feedback loop
+        sourceNode.connect(dryGain).connect(audioCtx.destination);
+        sourceNode.connect(wetGain).connect(audioCtx.destination);
+        sourceNode.connect(delayNode).connect(feedbackGain).connect(delayNode);
+        delayNode.connect(wetGain);
+
+        // 4. initialize params & listeners
+        updateParams();
+        [delaySlider, feedbackSlider, mixSlider].forEach((slider) =>
+          slider.addEventListener("input", updateParams),
+        );
+      }
+
+      function stopEcho() {
+        stopBtn.disabled = true;
+        startBtn.disabled = false;
+        if (micStream) {
+          micStream.getTracks().forEach((t) => t.stop());
+        }
+        if (audioCtx) {
+          audioCtx.close();
+        }
+      }
+
+      startBtn.addEventListener("click", startEcho);
+      stopBtn.addEventListener("click", stopEcho);
+    </script>
+  </body>
+</html>
